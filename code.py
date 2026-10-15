@@ -1,24 +1,12 @@
-
 from pathlib import Path
-import json
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
-from sklearn.pipeline import Pipeline
+from scipy.stats import chi2_contingency
+from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler, MinMaxScaler
-from sklearn.feature_selection import VarianceThreshold
-from sklearn.tree import DecisionTreeClassifier, plot_tree
-from sklearn.naive_bayes import GaussianNB
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.neural_network import MLPClassifier
-from sklearn.metrics import (roc_auc_score, roc_curve, confusion_matrix,
-                             classification_report)
-
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 
 SEED = 42
@@ -75,3 +63,39 @@ ax.set_yticklabels(cols_num)
 plt.colorbar(im, ax=ax)
 fig.savefig(OUT / "02_corr_numeriche.png", dpi=150, bbox_inches="tight")
 plt.close(fig)
+
+
+CAT_VARS = list(X_fit.select_dtypes(exclude="number").columns)
+
+def cramers_v(x, y):
+    table = pd.crosstab(x, y)
+    chi2 = chi2_contingency(table, correction=False)[0]
+    n = table.values.sum()
+    r, k = table.shape
+    return float(np.sqrt(chi2 / (n * (min(r, k) - 1))))
+
+cramer_df = (pd.DataFrame({"Variable": CAT_VARS,
+                           "CramerV": [cramers_v(X_fit[c], y_fit) for c in CAT_VARS]})
+             .round(3)
+             .sort_values("CramerV", ascending=False))
+print("\nCramer's V:\n", cramer_df.to_string(index=False), "\n")
+
+fig, ax = plt.subplots()
+ax.barh(cramer_df["Variable"][::-1], cramer_df["CramerV"][::-1], color="steelblue")
+ax.set_title("Associazione categoriche con Attrition (Cramer's V)")
+ax.set_xlabel("Cramer's V")
+fig.savefig(OUT / "03_cramer_v.png", dpi=150, bbox_inches="tight")
+plt.close(fig)
+
+ALL_COL = list(X_fit.columns)
+CAT_WEAK = cramer_df.loc[cramer_df["CramerV"] < 0.05, "Variable"].tolist()
+COL_A = ALL_COL
+COL_B = [c for c in ALL_COL if c not in CAT_WEAK]
+
+def make_preprocessor(X):
+    num = X.select_dtypes(include="number").columns
+    cat = X.select_dtypes(exclude="number").columns
+    return ColumnTransformer([
+        ("num", StandardScaler(), num),
+        ("cat", OneHotEncoder(handle_unknown="ignore"), cat),
+    ])
