@@ -1,5 +1,9 @@
 from pathlib import Path
-
+import joblib
+from sklearn.feature_selection import VarianceThreshold
+from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
+from sklearn.pipeline import Pipeline, make_pipeline
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -92,10 +96,34 @@ CAT_WEAK = cramer_df.loc[cramer_df["CramerV"] < 0.05, "Variable"].tolist()
 COL_A = ALL_COL
 COL_B = [c for c in ALL_COL if c not in CAT_WEAK]
 
-def make_preprocessor(X):
+cv = StratifiedKFold(n_splits=10, shuffle=True, random_state=SEED)
+
+def make_preprocessor(X, scaler=StandardScaler):
     num = X.select_dtypes(include="number").columns
     cat = X.select_dtypes(exclude="number").columns
     return ColumnTransformer([
-        ("num", StandardScaler(), num),
-        ("cat", OneHotEncoder(handle_unknown="ignore"), cat),
-    ])
+        ("num", scaler(), num),
+        ("cat", make_pipeline(OneHotEncoder(handle_unknown="ignore"),
+                              VarianceThreshold(0.0475)), cat),
+    ], sparse_threshold=0)
+
+def run(name, model, cols, grid=None, scaler=StandardScaler):
+    Path("models").mkdir(exist_ok=True)
+    Xf, Xv = X_fit[cols], X_val[cols]
+    pipe = Pipeline([("prep", make_preprocessor(Xf, scaler)), ("model", model)])
+
+    search = GridSearchCV(pipe, grid or {}, cv=cv, scoring=METRIC, n_jobs=-1)
+    search.fit(Xf, y_fit)
+
+    i = search.best_index_
+    folds = [search.cv_results_[f"split{k}_test_score"][i] for k in range(cv.get_n_splits())]
+    proba = search.predict_proba(Xv)[:, 1]
+
+    print(f"[{name}] parametri scelti: {search.best_params_}")
+    print(f"[{name}] CV AUC: {np.mean(folds):.3f} ± {np.std(folds, ddof=1):.3f}")
+    print(f"[{name}] AUC validation: {roc_auc_score(y_val, proba):.3f}")
+
+    joblib.dump(search.best_estimator_, f"models/{name}.joblib")
+    joblib.dump(proba, f"models/{name}_proba.joblib")
+    joblib.dump(folds, f"models/{name}_cv.joblib")
+    return search
