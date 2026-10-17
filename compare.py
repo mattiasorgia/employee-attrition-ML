@@ -11,5 +11,5 @@ cv_auc = pd.DataFrame({Path(f).stem.replace("_cv", ""): joblib.load(f)
 print(cv_auc.agg(["mean", "std", "min", "max"]).T.round(3).sort_values("mean", ascending=False))
 
 ax = cv_auc.plot.box(title="AUC in CV (10 fold)", ylabel="AUC")
-ax.figure.savefig(OUT / "05_confronto_cv.png", dpi=150, bbox_inches="tight")
+ax.figure.savefig(OUT / "05_confronto_cv.png")
 plt.close(ax.figure)

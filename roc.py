@@ -3,16 +3,16 @@ import glob
 import joblib
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, roc_auc_score
-from code import y_val
+from common import y_val
 
 Path("output").mkdir(exist_ok=True)
 
 fig, ax = plt.subplots()
-for f in sorted(glob.glob("models/*_prob.joblib")):
-    name = Path(f).stem.replace("_prob", "")
-    prob = joblib.load(f)
-    fpr, tpr, _ = roc_curve(y_val, prob)
-    ax.plot(fpr, tpr, label=f"{name} (AUC {roc_auc_score(y_val, prob):.3f})")
+for f in sorted(glob.glob("models/*_proba.joblib")):
+    name = Path(f).stem.replace("_proba", "")
+    proba = joblib.load(f)
+    fpr, tpr, _ = roc_curve(y_val, proba)
+    ax.plot(fpr, tpr, label=f"{name} (AUC {roc_auc_score(y_val, proba):.3f})")
 
 ax.plot([0, 1], [0, 1], "--", color="grey")
 ax.set_xlabel("Falsi positivi (1 - specificità)")
